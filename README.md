@@ -180,3 +180,9 @@ The Todo list view shows/hides buttons based on permissions:
    - Users only see UI elements for actions they can perform
    - Permission-less actions are hidden or disabled
    - Clear error messages explain why actions are denied
+
+
+## demo showcase
+
+https://github.com/user-attachments/assets/9162fe3b-55f9-40b7-80de-f683b280469b
+
