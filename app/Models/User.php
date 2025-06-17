@@ -52,4 +52,44 @@ class User extends Authenticatable
             'two_factor_expires_at' => 'datetime',
         ];
     }
+
+    /**
+     * Get the user's role.
+     */
+    public function role()
+    {
+        return $this->hasOne(UserRole::class, 'user_id');
+    }
+
+    /**
+     * Check if the user has a specific role.
+     *
+     * @param string $roleName
+     * @return bool
+     */
+    public function hasRole(string $roleName): bool
+    {
+        return $this->role && $this->role->role_name === $roleName;
+    }
+
+    /**
+     * Check if the user has a specific permission.
+     *
+     * @param string $permission
+     * @return bool
+     */
+    public function hasPermission(string $permission): bool
+    {
+        return $this->role && $this->role->hasPermission($permission);
+    }
+
+    /**
+     * Check if the user is an administrator.
+     *
+     * @return bool
+     */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole('Administrator');
+    }
 }

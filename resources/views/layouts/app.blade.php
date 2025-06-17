@@ -33,7 +33,22 @@
                 <div class="collapse navbar-collapse" id="navbarSupportedContent">
                     <!-- Left Side Of Navbar -->
                     <ul class="navbar-nav me-auto">
-
+                        @auth
+                            @if(Auth::user()->isAdmin())
+                                <li class="nav-item">
+                                    <a class="nav-link" href="{{ route('admin.dashboard') }}">Admin Dashboard</a>
+                                </li>
+                            @else
+                                <li class="nav-item">
+                                    <a class="nav-link" href="{{ route('todo.index') }}">My Todos</a>
+                                </li>
+                                @if(Auth::user()->hasPermission('Create'))
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ route('todo.create') }}">New Todo</a>
+                                    </li>
+                                @endif
+                            @endif
+                        @endauth
                     </ul>
 
                     <!-- Right Side Of Navbar -->

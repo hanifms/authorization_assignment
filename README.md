@@ -1,154 +1,182 @@
-# Todo App with Enhanced User Profile Management
+# Laravel Todo App - Role-Based Access Control (RBAC) Implementation
 
-This Laravel-based Todo application features comprehensive user profile management capabilities.
+## Requirements Implemented
 
-## Profile Management Features
+1.  Added authorization layer requiring login before accessing Todo pages
+2.  Implemented RBAC to redirect users based on roles:
+   - Regular users to Todo management pages
+   - Administrators to admin dashboard with user management
+3.  Created UserRoles table with:
+   - RoleID
+   - UserID
+   - RoleName
+   - Description
+4.  Created RolePermissions table with:
+   - PermissionID
+   - RoleID
+   - Description (Create, Retrieve, Update, Delete)
+5.  Implemented UI that shows/hides buttons based on permissions
+   - Users with Create permission see "Add Todo" button
+   - Users with Update permission see edit buttons
+   - Users with Delete permission see delete buttons
 
-### User Profile Fields
-- **Nickname**: Editable display name shown in the top-right menu
-- **Avatar**: Uploadable profile picture (max 2MB, stored in `storage/app/public/avatars/`)
-- **Email**: Editable email address with unique validation
-- **Password**: Secure password change functionality
-- **Phone**: Optional contact number
-- **City**: Optional location information
+## Implementation Details
 
-### Implementation Details
+### Database Structure
 
-#### Key Files
-- `database/migrations/2025_06_16_000000_add_profile_fields_to_users_table.php`: Profile fields schema
-- `app/Models/User.php`: User model with fillable fields
-- `app/Http/Controllers/ProfileController.php`: Profile management logic
-- `resources/views/profile/show.blade.php`: Profile edit interface
-
-#### Example Code Snippets
-
-User Model Fields:
-```php
-protected $fillable = [
-    'name',
-    'nickname',
-    'avatar',
-    'email',
-    'password',
-    'phone',
-    'city'
-];
-```
-
-Avatar Upload Method:
-```php
-public function updateAvatar(Request $request)
-{
-    $request->validate(['avatar' => 'required|image|max:2048']);
-    $avatarPath = $request->file('avatar')->store('avatars', 'public');
-    auth()->user()->update(['avatar' => $avatarPath]);
-}
-```
-
-### Directory Structure
-```
-app/
-├── Http/Controllers/
-│   └── ProfileController.php     # Profile management
-├── Models/
-│   └── User.php                  # User model
-resources/
-└── views/
-    ├── layouts/
-    │   └── app.blade.php         # Main layout with user menu
-    └── profile/
-        └── show.blade.php        # Profile edit form
-```
-
-## TL;DR
-Full user profile management system with editable nickname, avatar upload, contact details, and account deletion. Uses Laravel's built-in authentication with enhanced profile features.
-
-
-## Input Validation for Registration Login Pages
-
-The application uses Form Request classes to validate user input, implementing Laravel regex patterns as whitelists for required inputs.
-
-### Form Request Classes
-- `app/Http/Requests/RegisterRequest.php`: Validates registration data with strict regex patterns
-- `app/Http/Requests/LoginRequest.php`: Validates login credentials
-- `app/Http/Requests/TwoFactorChallengeRequest.php`: Validates 2FA verification codes
-
-### Implementation
-The validation is implemented in Form Request classes that are used by the Auth controllers:
+#### User Roles Table
+Located at `database/migrations/2025_06_17_000000_create_user_roles_table.php`
 
 ```php
-// app/Http/Requests/RegisterRequest.php
-public function rules()
-{
-    return [
-        'name' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z\s]+$/'],
-        'nickname' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9_\-]+$/'],
-        'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-        'password' => [
-            'required', 'string', 'min:8', 'confirmed',
-            'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$/'
-        ],
-    ];
-}
-
-// app/Http/Requests/LoginRequest.php
-public function rules()
-{
-    return [
-        'email' => [
-            'required', 'string', 'email', 'max:255',
-            'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'
-        ],
-        'password' => ['required', 'string'],
-        'remember' => ['sometimes', 'boolean'],
-    ];
-}
-```
-
-### Controller Integration
-The Form Requests are used in the controllers to handle validation:
-
-```php
-// app/Http/Controllers/Auth/LoginController.php
-public function login(LoginRequest $request)
-{
-    // Request is already validated by LoginRequest
-    $credentials = $request->only('email', 'password');
-    $remember = $request->filled('remember');
+Schema::create('user_roles', function (Blueprint $table) {
+    $table->id('role_id');
+    $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+    $table->string('role_name');
+    $table->text('description')->nullable();
+    $table->timestamps();
     
-    if (Auth::attempt($credentials, $remember)) {
-        // Authentication successful
+    // A user can have only one role
+    $table->unique('user_id');
+});
+```
+
+#### Role Permissions Table
+Located at `database/migrations/2025_06_17_000001_create_role_permissions_table.php`
+
+```php
+Schema::create('role_permissions', function (Blueprint $table) {
+    $table->id('permission_id');
+    $table->foreignId('role_id')->constrained('user_roles', 'role_id')->onDelete('cascade');
+    $table->enum('description', ['Create', 'Retrieve', 'Update', 'Delete']);
+    $table->timestamps();
+    
+    // A role can have a specific permission only once
+    $table->unique(['role_id', 'description']);
+});
+```
+
+### Key Models
+
+#### UserRole Model (`app/Models/UserRole.php`)
+```php
+public function permissions()
+{
+    return $this->hasMany(RolePermission::class, 'role_id', 'role_id');
+}
+
+public function hasPermission(string $permission): bool
+{
+    return $this->permissions()->where('description', $permission)->exists();
+}
+```
+
+#### User Model (`app/Models/User.php`)
+```php
+public function role()
+{
+    return $this->hasOne(UserRole::class, 'user_id');
+}
+
+public function hasPermission(string $permission): bool
+{
+    return $this->role && $this->role->hasPermission($permission);
+}
+
+public function isAdmin(): bool
+{
+    return $this->hasRole('Administrator');
+}
+```
+
+### Middleware
+
+#### RoleMiddleware (`app/Http/Middleware/RoleMiddleware.php`)
+Restricts routes based on user roles:
+```php
+public function handle(Request $request, Closure $next, string $role)
+{
+    // Check if user has the required role
+    if (!Auth::user()->hasRole($role)) {
+        return redirect()->route('home')->with('error', 'You do not have permission to access this page.');
     }
-}
-
-// app/Http/Controllers/Auth/RegisterController.php
-public function register(\Illuminate\Http\Request $request)
-{
-    // Validation using rules from RegisterRequest
-    $validator = \Illuminate\Support\Facades\Validator::make(
-        $request->all(), 
-        (new \App\Http\Requests\RegisterRequest)->rules(),
-        (new \App\Http\Requests\RegisterRequest)->messages()
-    );
-    
-    if ($validator->fails()) {
-        return redirect()->back()->withErrors($validator)->withInput();
-    }
-    
-    // Create user if validation passes
+    return $next($request);
 }
 ```
 
-### Key Features
-- **Name**: Only allows letters and spaces (`regex:/^[A-Za-z\s]+$/`)
-- **Nickname**: Only allows letters, numbers, underscores, and dashes (`regex:/^[A-Za-z0-9_\-]+$/`)
-- **Email**: Validates proper email format with specific pattern
-- **Password**: Requires minimum 8 characters with uppercase, lowercase, number, and special character
-- **2FA Code**: Must be exactly 6 digits (`regex:/^\d{6}$/`)
+#### PermissionMiddleware (`app/Http/Middleware/PermissionMiddleware.php`)
+Restricts actions based on user permissions:
+```php
+public function handle(Request $request, Closure $next, $permission)
+{
+    if (!Auth::user()->hasPermission($permission)) {
+        return redirect()->back()->with('error', 'You do not have permission to perform this action.');
+    }
+    return $next($request);
+}
+```
 
-### Benefits
-- Controllers remain lean with validation logic moved to Form Request classes
-- Custom error messages provide clear feedback to users
-- Consistent validation rules across the application
-- Enhanced security through strict input whitelist validation
-- Improved maintainability through separation of concerns
+### Routes
+
+Routes are protected with middleware to enforce RBAC:
+```php
+// Todo routes with permission middleware
+Route::middleware('auth')->group(function () {
+    Route::get('/todo', [TodoController::class, 'index'])
+        ->middleware('permission:Retrieve')
+        ->name('todo.index');
+    
+    Route::get('/todo/create', [TodoController::class, 'create'])
+        ->middleware('permission:Create')
+        ->name('todo.create');
+    // Other routes...
+});
+
+// Admin routes protected by role middleware
+Route::middleware(['auth', 'role:Administrator'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
+    // Other admin routes...
+});
+```
+
+### Views
+
+The Todo list view shows/hides buttons based on permissions:
+```blade
+<!-- resources/views/todo/list.blade.php -->
+@if(Auth::user()->hasPermission('Create'))
+    <a href="{{ route('todo.create') }}" class="btn btn-primary btn-sm">Add Todo</a>
+@endif
+
+<!-- In table rows -->
+@if(Auth::user()->hasPermission('Update'))
+    <a href="{{ route('todo.edit', $todo->id) }}" class="btn btn-sm btn-primary">Edit</a>
+@endif
+
+@if(Auth::user()->hasPermission('Delete'))
+    <form action="{{ route('todo.destroy', $todo->id) }}" method="POST" class="d-inline">
+        <!-- Delete form -->
+    </form>
+@endif
+```
+
+## TL;DR - How It Works
+
+1. **Authentication Flow**: Login → Role Check → Redirect to appropriate page
+   - Admins go to Dashboard
+   - Users go to Todo list
+
+2. **Authorization System**:
+   - **Roles**: Administrator or User role assigned to each user
+   - **Permissions**: Create, Retrieve, Update, Delete permissions linked to roles
+   - **UI Elements**: Buttons and links appear only when user has proper permissions
+
+3. **Admin Functions**:
+   - View all users and their todos
+   - Toggle user activation status
+   - Delete users
+   - Manage user permissions
+
+4. **User Experience**:
+   - Users only see UI elements for actions they can perform
+   - Permission-less actions are hidden or disabled
+   - Clear error messages explain why actions are denied

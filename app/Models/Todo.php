@@ -10,4 +10,12 @@ class Todo extends Model
     use HasFactory;
 
     protected $fillable = ['title', 'description', 'user_id', 'status'];
+
+    /**
+     * Get the user that owns the todo.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
 }

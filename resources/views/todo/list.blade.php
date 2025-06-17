@@ -7,7 +7,9 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Todo List</span>
+                    @if(Auth::user()->hasPermission('Create'))
                     <a href="{{ route('todo.create') }}" class="btn btn-primary btn-sm">Add Todo</a>
+                    @endif
                 </div>
 
                 <div class="card-body">
@@ -38,12 +40,19 @@
                                 <td>{{ $todo->description }}</td>
                                 <td>{{ ucfirst($todo->status) }}</td>
                                 <td>
+                                    <a href="{{ route('todo.show', $todo->id) }}" class="btn btn-sm btn-info">View</a>
+
+                                    @if(Auth::user()->hasPermission('Update'))
                                     <a href="{{ route('todo.edit', $todo->id) }}" class="btn btn-sm btn-primary">Edit</a>
+                                    @endif
+
+                                    @if(Auth::user()->hasPermission('Delete'))
                                     <form action="{{ route('todo.destroy', $todo->id) }}" method="POST" class="d-inline">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">Delete</button>
                                     </form>
+                                    @endif
                                 </td>
                             </tr>
                             @endforeach
