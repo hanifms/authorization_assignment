@@ -428,6 +428,92 @@ public function store(TwoFactorChallengeRequest $request)
 
 This approach to input validation improves both security and user experience while maintaining clean, maintainable code architecture by keeping controllers focused on their primary responsibilities.
 
+## 5. Role-Based Access Control (RBAC) Implementation
+
+This section details the implementation of Role-Based Access Control (RBAC) in the application.
+
+### 5.1 Database Structure
+
+Two new tables were created to support RBAC:
+
+```php
+// UserRoles table
+Schema::create('user_roles', function (Blueprint $table) {
+    $table->id('role_id');
+    $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+    $table->string('role_name'); // 'Administrator' or 'User'
+    $table->text('description')->nullable();
+    $table->timestamps();
+    $table->unique('user_id'); // One role per user
+});
+
+// RolePermissions table
+Schema::create('role_permissions', function (Blueprint $table) {
+    $table->id('permission_id');
+    $table->foreignId('role_id')->constrained('user_roles', 'role_id')->onDelete('cascade');
+    $table->enum('description', ['Create', 'Retrieve', 'Update', 'Delete']);
+    $table->timestamps();
+    $table->unique(['role_id', 'description']);
+});
+```
+
+### 5.2 Authorization Middleware
+
+The application uses two key middleware components:
+
+```php
+// RoleMiddleware - Restricts access based on user role
+public function handle(Request $request, Closure $next, string $role)
+{
+    if (!Auth::user()->hasRole($role)) {
+        return redirect()->route('home')->with('error', 'Access denied.');
+    }
+    return $next($request);
+}
+
+// PermissionMiddleware - Restricts actions based on permissions
+public function handle(Request $request, Closure $next, $permission)
+{
+    if (!Auth::user()->hasPermission($permission)) {
+        return redirect()->back()->with('error', 'Permission denied.');
+    }
+    return $next($request);
+}
+```
+
+### 5.3 User Role Management
+
+Each user is assigned either an Administrator or User role with appropriate permissions:
+
+- **Administrator**: Full access (Create, Retrieve, Update, Delete)
+- **User**: Limited access (typically Create and Retrieve only)
+
+### 5.4 Permission-Based UI
+
+The UI elements adapt based on user permissions:
+
+```blade
+@if(Auth::user()->hasPermission('Create'))
+    <a href="{{ route('todo.create') }}" class="btn btn-primary">Add Todo</a>
+@endif
+```
+
+### 5.5 Admin Dashboard
+
+Administrators have access to:
+- User management (view all users)
+- User activation/deactivation
+- User deletion
+- Permission management for users
+- View todos created by any user
+
+### 5.6 Security Considerations
+
+- Routes are protected at the middleware level
+- UI elements are conditionally rendered based on permissions
+- Clear feedback is provided when permission is denied
+- Role and permission checks are performed on every protected action
+
 ## TL;DR
 
-This Laravel Todo app features email-based two-factor authentication using Laravel Fortify. When users with 2FA enabled log in, they receive a time-limited verification code by email. The system includes Bcrypt password hashing, rate limiting (3 attempts/minute), and a simple user interface for enabling/disabling 2FA from the profile page. Additionally, a comprehensive user profile management system allows users to update their profile information and avatar, with strict validation and security measures in place.
+The Laravel Todo application has been enhanced with a comprehensive Role-Based Access Control (RBAC) system. Users must authenticate before accessing any todo features. Once logged in, the system identifies their role (Administrator or User) and redirects them to the appropriate interface. Administrators can manage users and their permissions, while regular users can only perform actions they have permission for. The UI dynamically adapts to show only the buttons and features each user is authorized to use based on their permissions. This implementation ensures proper separation of concerns, with different user types having appropriate access levels to application features.
